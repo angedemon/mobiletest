@@ -38,6 +38,10 @@ type telemetryExtra struct {
 	BrowsingScore          float64 `json:"browsingScore"`
 	SignalDbm              float64 `json:"signalDbm"`
 	SignalLevel            float64 `json:"signalLevel"`
+	RSRP                   float64 `json:"rsrp"`
+	RSRQ                   float64 `json:"rsrq"`
+	SINR                   float64 `json:"sinr"`
+	SimSlot                float64 `json:"simSlot"`
 }
 
 // validateTelemetry renvoie une erreur décrivant le premier champ hors bornes,
@@ -93,6 +97,11 @@ func validateTelemetry(dl, ul, ping, jitter, extra string) error {
 		// 0 = signal non relevé ; sinon une puissance radio est négative.
 		{"signalDbm", e.SignalDbm, -160, 0},
 		{"signalLevel", e.SignalLevel, 0, 4},
+		// Plages 3GPP (LTE et NR), 0 = non mesuré.
+		{"rsrp", e.RSRP, -156, 0},
+		{"rsrq", e.RSRQ, -43, 20},
+		{"sinr", e.SINR, -23, 40},
+		{"simSlot", e.SimSlot, 0, 4},
 	}
 	for _, r := range ranges {
 		if r.value < r.min || r.value > r.max {

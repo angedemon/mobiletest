@@ -70,6 +70,13 @@ type Document struct {
 	MeasurementType string `bson:"measurement_type" json:"measurementType"`
 	SignalDbm       int    `bson:"signal_dbm"       json:"signalDbm"`
 	SignalLevel     int    `bson:"signal_level"     json:"signalLevel"`
+	// Qualité radio de la cellule de service (4G/5G) et emplacement de la
+	// SIM qui porte les données. 0 = non mesuré (test Wi-Fi, 2G/3G, ancienne
+	// version de l'app).
+	RSRP    int `bson:"rsrp"     json:"rsrp"`
+	RSRQ    int `bson:"rsrq"     json:"rsrq"`
+	SINR    int `bson:"sinr"     json:"sinr"`
+	SimSlot int `bson:"sim_slot" json:"simSlot"`
 	// Origine de la position : "gps", "gps_mocked" (position simulée par une
 	// app de faux GPS), "ip" (géolocalisation approximative de l'adresse IP)
 	// ou vide pour les mesures antérieures au champ.
@@ -112,6 +119,10 @@ type mobileExtra struct {
 	SignalLevel int    `json:"signalLevel"`
 	// "gps", "gps_mocked" ou "ip" (voir Document.LocationSource).
 	LocationSource string `json:"locationSource"`
+	RSRP           int    `json:"rsrp"`
+	RSRQ           int    `json:"rsrq"`
+	SINR           int    `json:"sinr"`
+	SimSlot        int    `json:"simSlot"`
 }
 
 // ispInfo matches the real shape stored in the isp_info field:
@@ -723,6 +734,10 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 			doc.SignalDbm = extra.SignalDbm
 			doc.SignalLevel = extra.SignalLevel
 			doc.LocationSource = extra.LocationSource
+			doc.RSRP = extra.RSRP
+			doc.RSRQ = extra.RSRQ
+			doc.SINR = extra.SINR
+			doc.SimSlot = extra.SimSlot
 			// Une position simulée rend la mesure inexploitable pour la
 			// carte : rien ne garantit qu'elle a été faite à cet endroit.
 			doc.Suspect = extra.LocationSource == "gps_mocked"

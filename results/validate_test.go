@@ -27,6 +27,8 @@ func TestValidateTelemetry(t *testing.T) {
 		{"note QoE > 5", "25", "8", "45", "3", `{"qoeRating":9}`, true},
 		{"type inconnu", "25", "8", "45", "3", `{"type":"bot"}`, true},
 		{"signal positif", "0", "0", "", "", `{"type":"passive","signalDbm":20}`, true},
+		{"radio 4G valide", "25", "8", "45", "3", `{"rsrp":-98,"rsrq":-11,"sinr":12,"simSlot":2}`, false},
+		{"RSRP impossible", "25", "8", "45", "3", `{"rsrp":-300}`, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
