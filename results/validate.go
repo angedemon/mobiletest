@@ -42,6 +42,13 @@ type telemetryExtra struct {
 	RSRQ                   float64 `json:"rsrq"`
 	SINR                   float64 `json:"sinr"`
 	SimSlot                float64 `json:"simSlot"`
+	DownloadMin            float64 `json:"downloadMin"`
+	DownloadMax            float64 `json:"downloadMax"`
+	UploadMin              float64 `json:"uploadMin"`
+	UploadMax              float64 `json:"uploadMax"`
+	PingMin                float64 `json:"pingMin"`
+	PingMax                float64 `json:"pingMax"`
+	PacketLoss             float64 `json:"packetLoss"`
 }
 
 // validateTelemetry renvoie une erreur décrivant le premier champ hors bornes,
@@ -102,6 +109,14 @@ func validateTelemetry(dl, ul, ping, jitter, extra string) error {
 		{"rsrq", e.RSRQ, -43, 20},
 		{"sinr", e.SINR, -23, 40},
 		{"simSlot", e.SimSlot, 0, 4},
+		{"downloadMin", e.DownloadMin, 0, maxSpeedMbps},
+		{"downloadMax", e.DownloadMax, 0, maxSpeedMbps},
+		{"uploadMin", e.UploadMin, 0, maxSpeedMbps},
+		{"uploadMax", e.UploadMax, 0, maxSpeedMbps},
+		{"pingMin", e.PingMin, 0, maxLatencyMs},
+		{"pingMax", e.PingMax, 0, maxLatencyMs},
+		// -1 = perte non mesurée.
+		{"packetLoss", e.PacketLoss, -1, 100},
 	}
 	for _, r := range ranges {
 		if r.value < r.min || r.value > r.max {

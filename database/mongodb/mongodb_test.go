@@ -107,3 +107,15 @@ func TestToDocumentFlagsMockedLocation(t *testing.T) {
 		t.Error("une position GPS réelle ne doit pas être marquée suspecte")
 	}
 }
+
+func TestToDocumentPacketLoss(t *testing.T) {
+	m := &MongoDB{}
+	absent := m.toDocument(&schema.TelemetryData{Extra: `{"type":"active"}`})
+	if absent.PacketLoss != -1 {
+		t.Errorf("perte absente : %v, attendu -1 (non mesurée)", absent.PacketLoss)
+	}
+	zero := m.toDocument(&schema.TelemetryData{Extra: `{"type":"active","packetLoss":0}`})
+	if zero.PacketLoss != 0 {
+		t.Errorf("perte nulle : %v, attendu 0", zero.PacketLoss)
+	}
+}

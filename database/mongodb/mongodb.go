@@ -77,6 +77,16 @@ type Document struct {
 	RSRQ    int `bson:"rsrq"     json:"rsrq"`
 	SINR    int `bson:"sinr"     json:"sinr"`
 	SimSlot int `bson:"sim_slot" json:"simSlot"`
+	// Débits (Mb/s) et latence (ms) minimum et maximum relevés pendant le
+	// test ; la valeur moyenne reste dans dl/ul/ping. 0 = non mesuré.
+	DownloadMin float64 `bson:"dl_min"   json:"downloadMin"`
+	DownloadMax float64 `bson:"dl_max"   json:"downloadMax"`
+	UploadMin   float64 `bson:"ul_min"   json:"uploadMin"`
+	UploadMax   float64 `bson:"ul_max"   json:"uploadMax"`
+	PingMin     float64 `bson:"ping_min" json:"pingMin"`
+	PingMax     float64 `bson:"ping_max" json:"pingMax"`
+	// Perte de paquets en %, -1 = non mesurée (0 est une valeur légitime).
+	PacketLoss float64 `bson:"packet_loss" json:"packetLoss"`
 	// Origine de la position : "gps", "gps_mocked" (position simulée par une
 	// app de faux GPS), "ip" (géolocalisation approximative de l'adresse IP)
 	// ou vide pour les mesures antérieures au champ.
@@ -123,6 +133,13 @@ type mobileExtra struct {
 	RSRQ           int    `json:"rsrq"`
 	SINR           int    `json:"sinr"`
 	SimSlot        int    `json:"simSlot"`
+	DownloadMin    float64 `json:"downloadMin"`
+	DownloadMax    float64 `json:"downloadMax"`
+	UploadMin      float64 `json:"uploadMin"`
+	UploadMax      float64 `json:"uploadMax"`
+	PingMin        float64 `json:"pingMin"`
+	PingMax        float64 `json:"pingMax"`
+	PacketLoss     *float64 `json:"packetLoss"`
 }
 
 // ispInfo matches the real shape stored in the isp_info field:
@@ -738,6 +755,17 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 			doc.RSRQ = extra.RSRQ
 			doc.SINR = extra.SINR
 			doc.SimSlot = extra.SimSlot
+			doc.DownloadMin = extra.DownloadMin
+			doc.DownloadMax = extra.DownloadMax
+			doc.UploadMin = extra.UploadMin
+			doc.UploadMax = extra.UploadMax
+			doc.PingMin = extra.PingMin
+			doc.PingMax = extra.PingMax
+			// Champ absent (anciennes versions de l'app) : non mesuré.
+			doc.PacketLoss = -1
+			if extra.PacketLoss != nil {
+				doc.PacketLoss = *extra.PacketLoss
+			}
 			// Une position simulée rend la mesure inexploitable pour la
 			// carte : rien ne garantit qu'elle a été faite à cet endroit.
 			doc.Suspect = extra.LocationSource == "gps_mocked"
