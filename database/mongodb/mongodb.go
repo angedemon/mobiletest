@@ -70,6 +70,13 @@ type Document struct {
 	MeasurementType string `bson:"measurement_type" json:"measurementType"`
 	SignalDbm       int    `bson:"signal_dbm"       json:"signalDbm"`
 	SignalLevel     int    `bson:"signal_level"     json:"signalLevel"`
+	// Origine de la position : "gps", "gps_mocked" (position simulée par une
+	// app de faux GPS), "ip" (géolocalisation approximative de l'adresse IP)
+	// ou vide pour les mesures antérieures au champ.
+	LocationSource string `bson:"location_source" json:"locationSource"`
+	// Suspect écarte la mesure de toutes les statistiques et de la carte,
+	// sans la supprimer : elle reste en base pour analyse.
+	Suspect bool `bson:"suspect" json:"-"`
 	// From ISPInfo
 	City    string `bson:"city"    json:"city"`
 	Country string `bson:"country" json:"country"`
@@ -103,6 +110,8 @@ type mobileExtra struct {
 	Type        string `json:"type"`
 	SignalDbm   int    `json:"signalDbm"`
 	SignalLevel int    `json:"signalLevel"`
+	// "gps", "gps_mocked" ou "ip" (voir Document.LocationSource).
+	LocationSource string `json:"locationSource"`
 }
 
 // ispInfo matches the real shape stored in the isp_info field:
@@ -281,12 +290,15 @@ func (m *MongoDB) FetchLast100() ([]schema.TelemetryData, error) {
 // correct puisqu'ils proviennent tous de tests actifs.
 var excludePassive = bson.M{"$ne": "passive"}
 
-// withoutPassive ajoute le filtre ci-dessus à un filtre existant.
+// withoutPassive ajoute le filtre ci-dessus à un filtre existant, et écarte
+// aussi les mesures marquées suspectes (position GPS simulée). `$ne: true`
+// retient les documents antérieurs, dépourvus du champ.
 func withoutPassive(filter bson.M) bson.M {
 	if filter == nil {
 		filter = bson.M{}
 	}
 	filter["measurement_type"] = excludePassive
+	filter["suspect"] = bson.M{"$ne": true}
 	return filter
 }
 
@@ -710,6 +722,10 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 			doc.BrowsingScore = extra.BrowsingScore
 			doc.SignalDbm = extra.SignalDbm
 			doc.SignalLevel = extra.SignalLevel
+			doc.LocationSource = extra.LocationSource
+			// Une position simulée rend la mesure inexploitable pour la
+			// carte : rien ne garantit qu'elle a été faite à cet endroit.
+			doc.Suspect = extra.LocationSource == "gps_mocked"
 			// Un `extra` sans type explicite provient d'une version antérieure
 			// de l'application mobile : c'était nécessairement un test actif.
 			doc.MeasurementType = extra.Type

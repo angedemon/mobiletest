@@ -176,6 +176,24 @@ doute, marquer le champ `json:"-"`.
 
 Le corps des requêtes de télémétrie est limité à 64 Kio (`MaxBytesReader`).
 
+### Contrôle des mesures reçues
+
+`POST /results/telemetry` est public : n'importe qui peut y envoyer des
+valeurs. Trois protections limitent les fausses mesures :
+
+| Protection | Fichier | Effet |
+|---|---|---|
+| Bornes de plausibilité | `results/validate.go` | Rejet (400) d'un débit négatif ou > 10 Gb/s, d'une latence > 60 s, de coordonnées hors du globe, d'un score hors de 0-100… |
+| Limite d'envoi par IP | `results/ratelimit.go` | Rejet (429) au-delà de 120 envois en 10 minutes. Volontairement large : les opérateurs partagent une IP entre de nombreux abonnés (CGNAT). |
+| Position simulée | `database/mongodb/mongodb.go` | L'app signale une position venant d'une app de faux GPS (`locationSource: "gps_mocked"`). La mesure est gardée en base avec `suspect: true`, mais écartée des statistiques, de la carte et du service IA. |
+
+Ces contrôles n'authentifient pas l'application : un envoi plausible reste
+accepté. L'étape suivante serait l'API Play Integrity de Google, qui atteste
+qu'une requête vient bien de l'app officielle.
+
+La limite par IP repose sur `X-Forwarded-For`, que le client peut remplir
+lui-même : elle freine un envoi en rafale naïf, pas un attaquant déterminé.
+
 ### Mesures actives et passives
 
 Depuis l'ajout de la collecte de couverture en arrière-plan, chaque document
@@ -229,9 +247,10 @@ go test ./...
 go vet ./...
 ```
 
-Deux fichiers de tests existent (`results/telemetry_test.go`,
-`database/mongodb/mongodb_test.go`). La couverture reste faible : c'est un
-chantier ouvert aux contributions.
+Les tests couvrent le masquage des IP (`results/telemetry_test.go`), le
+contrôle des mesures reçues (`results/validate_test.go`) et la lecture des
+champs mobiles (`database/mongodb/mongodb_test.go`). Ils tournent sur GitHub
+Actions à chaque push (`.github/workflows/go-test.yml`).
 
 ## Déploiement
 
@@ -257,8 +276,38 @@ L'instance de démonstration tourne sur Render en offre gratuite, à l'adresse
 > d'attente. Les clients doivent prévoir un délai long et des tentatives
 > successives.
 
+Le workflow `.github/workflows/keep-alive.yml` appelle le serveur toutes les
+10 minutes pour l'empêcher de s'endormir. L'application attend elle aussi
+jusqu'à 90 secondes que le serveur réponde avant de mesurer.
+
 CORS est configuré en `AllowedOrigins: ["*"]` dans `web/web.go`, ce qui convient
 à une API publique en lecture seule.
+
+### Héberger le serveur de mesure en Afrique
+
+Render n'a pas de datacenter en Afrique. Les mesures faites contre
+l'instance actuelle incluent donc le trajet jusqu'en Europe ou aux États-Unis :
+la latence est gonflée de plusieurs dizaines de millisecondes, et les débits
+élevés sont sous-estimés. Pour mesurer le réseau burkinabè lui-même, le
+serveur doit être au plus près des utilisateurs : un VPS chez un hébergeur
+local, ou à défaut en Afrique de l'Ouest (Abidjan, Dakar, Lagos, Accra).
+
+1. Lancer l'image Docker ci-dessus sur ce serveur, derrière un proxy HTTPS
+   (Caddy ou Nginx avec Let's Encrypt). Le trafic en clair est refusé par
+   l'application.
+2. Compiler l'application avec la nouvelle adresse, sans modifier le code :
+
+   ```bash
+   flutter build apk --release \
+     --dart-define=YELE_API_URL=https://mesure.exemple.bf \
+     --dart-define=YELE_SERVER_LABEL="yele_serveur — Ouagadougou"
+   ```
+
+3. Mettre à jour l'adresse dans `.github/workflows/keep-alive.yml`, ou
+   supprimer ce workflow : un VPS ne s'endort pas.
+
+Le tableau de bord et le service IA peuvent rester sur Render : seul le
+serveur contre lequel l'app mesure le débit doit être proche.
 
 ---
 

@@ -88,3 +88,22 @@ func TestToDocumentWithoutNewFields(t *testing.T) {
 		t.Errorf("Operator = %q, attendu Moov Africa", doc.Operator)
 	}
 }
+
+func TestToDocumentFlagsMockedLocation(t *testing.T) {
+	m := &MongoDB{}
+	mocked := m.toDocument(&schema.TelemetryData{
+		UUID:  "mocked",
+		Extra: `{"type":"active","latitude":12.36,"longitude":-1.52,"locationSource":"gps_mocked"}`,
+	})
+	if !mocked.Suspect || mocked.LocationSource != "gps_mocked" {
+		t.Errorf("position simulée : Suspect = %v, LocationSource = %q", mocked.Suspect, mocked.LocationSource)
+	}
+
+	real := m.toDocument(&schema.TelemetryData{
+		UUID:  "gps",
+		Extra: `{"type":"active","latitude":12.36,"longitude":-1.52,"locationSource":"gps"}`,
+	})
+	if real.Suspect {
+		t.Error("une position GPS réelle ne doit pas être marquée suspecte")
+	}
+}
