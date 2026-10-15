@@ -22,4 +22,4 @@ jobs:
         run: |
           curl --fail --silent --show-error --retry 6 --retry-delay 15 \
             --retry-all-errors --max-time 30 \
-            -o /dev/null https://mobiletest-j0c6.onrender.com/empty
+            -o /dev/null https://mobiletest-lw4k.onrender.com/empty
