@@ -90,6 +90,14 @@ type Document struct {
 	// Score global 0-100 calculé par l'app (formule : docs/SCORE.md de
 	// mobilefront). 0 = non calculé (anciennes versions de l'app).
 	GlobalScore float64 `bson:"global_score" json:"globalScore"`
+	// Identifiant du test côté app : un renvoi du même test (après l'avis
+	// QoE, ou une nouvelle tentative hors ligne) met à jour le document au
+	// lieu d'en créer un second.
+	TestID string `bson:"test_id,omitempty" json:"testId,omitempty"`
+	// Identifiant d'appareil anonyme (empreinte, ne révèle rien de
+	// personnel) et données consommées par le test en Kio (-1 = non mesuré).
+	DeviceID    string `bson:"device_id"     json:"-"`
+	DataUsedKiB int    `bson:"data_used_kib" json:"dataUsedKiB"`
 	// Origine de la position : "gps", "gps_mocked" (position simulée par une
 	// app de faux GPS), "ip" (géolocalisation approximative de l'adresse IP)
 	// ou vide pour les mesures antérieures au champ.
@@ -144,6 +152,9 @@ type mobileExtra struct {
 	PingMax        float64 `json:"pingMax"`
 	PacketLoss     *float64 `json:"packetLoss"`
 	GlobalScore    float64  `json:"globalScore"`
+	TestID         string   `json:"testId"`
+	DeviceID       string   `json:"deviceId"`
+	DataUsedKiB    *int     `json:"dataUsedKiB"`
 }
 
 // ispInfo matches the real shape stored in the isp_info field:
@@ -193,6 +204,11 @@ type MapPoint struct {
 	Ping        float64 `json:"ping"`
 	Location    string  `json:"location"`
 	Timestamp   string  `json:"timestamp"`
+	// Score global 0-100, RSRP et perte de paquets : couches et info-bulles
+	// de la carte (IMP-10, IMP-12).
+	GlobalScore float64 `json:"globalScore"`
+	RSRP        int     `json:"rsrp"`
+	PacketLoss  float64 `json:"packetLoss"`
 	// Streaming & browsing metrics (zero = test not performed)
 	StreamingScore         float64 `json:"streamingScore"`
 	StreamingMaxResolution string  `json:"streamingMaxResolution"`
@@ -257,6 +273,7 @@ func Open(uri, dbName string) *MongoDB {
 		{Keys: bson.D{{Key: "operator", Value: 1}}},
 		{Keys: bson.D{{Key: "ip_address", Value: 1}}},
 		{Keys: bson.D{{Key: "network_type", Value: 1}}},
+		{Keys: bson.D{{Key: "test_id", Value: 1}}},
 	}
 	if _, err := coll.Indexes().CreateMany(ctx, indexes); err != nil {
 		log.Warnf("MongoDB index creation warning: %s", err)
@@ -272,6 +289,13 @@ func (m *MongoDB) Insert(data *schema.TelemetryData) error {
 	doc := m.toDocument(data)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if doc.TestID != "" {
+		// Même test renvoyé (avis QoE ajouté, nouvelle tentative après un
+		// échec réseau) : mise à jour du document existant.
+		_, err := m.collection.ReplaceOne(ctx, bson.M{"test_id": doc.TestID}, doc,
+			options.Replace().SetUpsert(true))
+		return err
+	}
 	_, err := m.collection.InsertOne(ctx, doc)
 	return err
 }
@@ -400,27 +424,7 @@ func (m *MongoDB) FetchResults(page, limit int, operator, networkType, from, to 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := withoutPassive(bson.M{})
-	if operator != "" {
-		filter["operator"] = bson.M{"$regex": operator, "$options": "i"}
-	}
-	if networkType != "" {
-		filter["network_type"] = networkType
-	}
-	timeFilter := bson.M{}
-	if from != "" {
-		if t, err := time.Parse("2006-01-02", from); err == nil {
-			timeFilter["$gte"] = t
-		}
-	}
-	if to != "" {
-		if t, err := time.Parse("2006-01-02", to); err == nil {
-			timeFilter["$lte"] = t.Add(24 * time.Hour)
-		}
-	}
-	if len(timeFilter) > 0 {
-		filter["timestamp"] = timeFilter
-	}
+	filter := resultsFilter(operator, networkType, from, to)
 
 	total, _ := m.collection.CountDocuments(ctx, filter)
 	skip := int64((page - 1) * limit)
@@ -550,6 +554,9 @@ func (m *MongoDB) FetchMapPoints() ([]MapPoint, error) {
 			Ping:        round2(ping),
 			Location:    doc.Location,
 			Timestamp:   doc.Timestamp.Format("02/01/2006 15:04"),
+			GlobalScore: doc.GlobalScore,
+			RSRP:        doc.RSRP,
+			PacketLoss:  doc.PacketLoss,
 			StreamingScore:         round2(doc.StreamingScore),
 			StreamingMaxResolution: doc.StreamingMaxResolution,
 			StreamingRebufferRatio: round2(doc.StreamingRebufferRatio),
@@ -766,6 +773,12 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 			doc.PingMin = extra.PingMin
 			doc.PingMax = extra.PingMax
 			doc.GlobalScore = extra.GlobalScore
+			doc.TestID = extra.TestID
+			doc.DeviceID = extra.DeviceID
+			doc.DataUsedKiB = -1
+			if extra.DataUsedKiB != nil {
+				doc.DataUsedKiB = *extra.DataUsedKiB
+			}
 			// Champ absent (anciennes versions de l'app) : non mesuré.
 			doc.PacketLoss = -1
 			if extra.PacketLoss != nil {

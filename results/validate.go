@@ -50,6 +50,9 @@ type telemetryExtra struct {
 	PingMax                float64 `json:"pingMax"`
 	PacketLoss             float64 `json:"packetLoss"`
 	GlobalScore            float64 `json:"globalScore"`
+	DataUsedKiB            float64 `json:"dataUsedKiB"`
+	TestID                 string  `json:"testId"`
+	DeviceID               string  `json:"deviceId"`
 }
 
 // validateTelemetry renvoie une erreur décrivant le premier champ hors bornes,
@@ -119,6 +122,11 @@ func validateTelemetry(dl, ul, ping, jitter, extra string) error {
 		// -1 = perte non mesurée.
 		{"packetLoss", e.PacketLoss, -1, 100},
 		{"globalScore", e.GlobalScore, 0, 100},
+		// -1 = non mesuré ; 50 Go maximum pour un test.
+		{"dataUsedKiB", e.DataUsedKiB, -1, 50 * 1024 * 1024},
+	}
+	if len(e.TestID) > 64 || len(e.DeviceID) > 64 {
+		return fmt.Errorf("extra: identifiant trop long")
 	}
 	for _, r := range ranges {
 		if r.value < r.min || r.value > r.max {
