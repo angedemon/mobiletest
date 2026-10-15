@@ -99,6 +99,7 @@ func ListenAndServe(conf *config.Config) error {
 	// Comptes utilisateurs (IMP-03)
 	r.Post(conf.BaseURL+"/api/auth/register", results.Register)
 	r.Post(conf.BaseURL+"/api/auth/login", results.Login)
+	r.Post(conf.BaseURL+"/api/auth/google", results.GoogleLogin)
 	r.Post(conf.BaseURL+"/api/auth/logout", results.Logout)
 	r.HandleFunc(conf.BaseURL+"/api/me", results.Me)
 	r.Get(conf.BaseURL+"/api/me/results", results.MyResults)
