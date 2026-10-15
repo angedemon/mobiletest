@@ -49,6 +49,7 @@ type telemetryExtra struct {
 	PingMin                float64 `json:"pingMin"`
 	PingMax                float64 `json:"pingMax"`
 	PacketLoss             float64 `json:"packetLoss"`
+	GlobalScore            float64 `json:"globalScore"`
 }
 
 // validateTelemetry renvoie une erreur décrivant le premier champ hors bornes,
@@ -117,6 +118,7 @@ func validateTelemetry(dl, ul, ping, jitter, extra string) error {
 		{"pingMax", e.PingMax, 0, maxLatencyMs},
 		// -1 = perte non mesurée.
 		{"packetLoss", e.PacketLoss, -1, 100},
+		{"globalScore", e.GlobalScore, 0, 100},
 	}
 	for _, r := range ranges {
 		if r.value < r.min || r.value > r.max {

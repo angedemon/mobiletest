@@ -87,6 +87,9 @@ type Document struct {
 	PingMax     float64 `bson:"ping_max" json:"pingMax"`
 	// Perte de paquets en %, -1 = non mesurée (0 est une valeur légitime).
 	PacketLoss float64 `bson:"packet_loss" json:"packetLoss"`
+	// Score global 0-100 calculé par l'app (formule : docs/SCORE.md de
+	// mobilefront). 0 = non calculé (anciennes versions de l'app).
+	GlobalScore float64 `bson:"global_score" json:"globalScore"`
 	// Origine de la position : "gps", "gps_mocked" (position simulée par une
 	// app de faux GPS), "ip" (géolocalisation approximative de l'adresse IP)
 	// ou vide pour les mesures antérieures au champ.
@@ -140,6 +143,7 @@ type mobileExtra struct {
 	PingMin        float64 `json:"pingMin"`
 	PingMax        float64 `json:"pingMax"`
 	PacketLoss     *float64 `json:"packetLoss"`
+	GlobalScore    float64  `json:"globalScore"`
 }
 
 // ispInfo matches the real shape stored in the isp_info field:
@@ -761,6 +765,7 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 			doc.UploadMax = extra.UploadMax
 			doc.PingMin = extra.PingMin
 			doc.PingMax = extra.PingMax
+			doc.GlobalScore = extra.GlobalScore
 			// Champ absent (anciennes versions de l'app) : non mesuré.
 			doc.PacketLoss = -1
 			if extra.PacketLoss != nil {
