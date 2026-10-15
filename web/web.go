@@ -94,6 +94,7 @@ func ListenAndServe(conf *config.Config) error {
 	r.Get(conf.BaseURL+"/api/dashboard/stats/advanced", results.DashboardAdvancedStats)
 	r.Get(conf.BaseURL+"/api/dashboard/export", results.DashboardExport)
 	r.Get(conf.BaseURL+"/api/dashboard/barometer", results.DashboardBarometer)
+	r.Post(conf.BaseURL+"/api/feedback", results.Feedback)
 
 	// Proxy vers le micro-service IA (prédiction + détection d'anomalies).
 	// /api/ai/anomalies -> <ai_service_url>/ai/anomalies

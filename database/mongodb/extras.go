@@ -303,3 +303,24 @@ func mean(values []float64) float64 {
 	}
 	return s / float64(len(values))
 }
+
+// ── Messages « Contactez-nous » (IMP-02) ─────────────────────────────────────
+
+// Feedback est un message envoyé depuis l'écran d'aide de l'application.
+type Feedback struct {
+	Timestamp  time.Time `bson:"timestamp"   json:"timestamp"`
+	Topic      string    `bson:"topic"       json:"topic"`
+	Message    string    `bson:"message"     json:"message"`
+	Email      string    `bson:"email"       json:"email"`
+	DeviceID   string    `bson:"device_id"   json:"deviceId"`
+	AppVersion string    `bson:"app_version" json:"appVersion"`
+}
+
+// InsertFeedback enregistre un message dans la collection `feedback`.
+func (m *MongoDB) InsertFeedback(f *Feedback) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	f.Timestamp = time.Now()
+	_, err := m.collection.Database().Collection("feedback").InsertOne(ctx, f)
+	return err
+}
