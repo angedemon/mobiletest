@@ -98,6 +98,8 @@ type Document struct {
 	// personnel) et données consommées par le test en Kio (-1 = non mesuré).
 	DeviceID    string `bson:"device_id"     json:"-"`
 	DataUsedKiB int    `bson:"data_used_kib" json:"dataUsedKiB"`
+	// Compte (IMP-03) : identifiant du compte connecté, vide si anonyme.
+	UserID string `bson:"user_id,omitempty" json:"-"`
 	// Origine de la position : "gps", "gps_mocked" (position simulée par une
 	// app de faux GPS), "ip" (géolocalisation approximative de l'adresse IP)
 	// ou vide pour les mesures antérieures au champ.
@@ -280,7 +282,11 @@ func Open(uri, dbName string) *MongoDB {
 	}
 
 	log.Infof("Connected to MongoDB Atlas, database: %s", dbName)
-	return &MongoDB{client: client, collection: coll}
+	m := &MongoDB{client: client, collection: coll}
+	if err := m.EnsureAccountIndexes(); err != nil {
+		log.Warnf("MongoDB account index warning: %s", err)
+	}
+	return m
 }
 
 // ── DataAccess interface ──────────────────────────────────────────────────────
@@ -734,6 +740,7 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 		UserAgent: data.UserAgent,
 		Language:  data.Language,
 		Log:       data.Log,
+		UserID:    data.UserID,
 	}
 
 	// Parse mobile extra JSON

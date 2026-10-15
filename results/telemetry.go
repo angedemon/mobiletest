@@ -227,6 +227,15 @@ func Record(w http.ResponseWriter, r *http.Request) {
 	uuid := ulid.MustNew(ulid.Timestamp(t), entropy)
 	record.UUID = uuid.String()
 
+	// IMP-03 : test fait par un utilisateur connecté → rattaché à son compte.
+	if database.MongoDB != nil {
+		if token := bearerToken(r); token != "" {
+			if u, err := database.MongoDB.UserForToken(token); err == nil {
+				record.UserID = u.ID.Hex()
+			}
+		}
+	}
+
 	err := database.DB.Insert(&record)
 	if err != nil {
 		log.Errorf("Error inserting into database: %s", err)

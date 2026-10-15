@@ -61,3 +61,13 @@ func TestRateLimiter(t *testing.T) {
 		t.Error("le compteur doit repartir à zéro après la fenêtre")
 	}
 }
+
+func TestValidEmail(t *testing.T) {
+	for e, want := range map[string]bool{
+		"awa@exemple.bf": true, "pas-un-email": false, "a@b": false, "<x>@y.bf": false,
+	} {
+		if validEmail(e) != want {
+			t.Errorf("validEmail(%q) = %v", e, !want)
+		}
+	}
+}

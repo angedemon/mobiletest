@@ -46,7 +46,7 @@ func ListenAndServe(conf *config.Config) error {
 
 	cs := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"GET", "POST", "OPTIONS", "HEAD"},
+		AllowedMethods: []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"},
 		AllowedHeaders: []string{"*"},
 	})
 
@@ -95,6 +95,13 @@ func ListenAndServe(conf *config.Config) error {
 	r.Get(conf.BaseURL+"/api/dashboard/export", results.DashboardExport)
 	r.Get(conf.BaseURL+"/api/dashboard/barometer", results.DashboardBarometer)
 	r.Post(conf.BaseURL+"/api/feedback", results.Feedback)
+
+	// Comptes utilisateurs (IMP-03)
+	r.Post(conf.BaseURL+"/api/auth/register", results.Register)
+	r.Post(conf.BaseURL+"/api/auth/login", results.Login)
+	r.Post(conf.BaseURL+"/api/auth/logout", results.Logout)
+	r.HandleFunc(conf.BaseURL+"/api/me", results.Me)
+	r.Get(conf.BaseURL+"/api/me/results", results.MyResults)
 
 	// Proxy vers le micro-service IA (prédiction + détection d'anomalies).
 	// /api/ai/anomalies -> <ai_service_url>/ai/anomalies

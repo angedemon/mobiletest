@@ -2,7 +2,6 @@ package results
 
 import (
 	"encoding/json"
-	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -22,14 +21,7 @@ func Feedback(w http.ResponseWriter, r *http.Request) {
 	if !mongoRequired(w) {
 		return
 	}
-	ip := r.Header.Get("X-Forwarded-For")
-	if i := strings.IndexByte(ip, ','); i >= 0 {
-		ip = ip[:i]
-	}
-	if ip = strings.TrimSpace(ip); ip == "" {
-		ip, _, _ = net.SplitHostPort(r.RemoteAddr)
-	}
-	if !feedbackLimiter.allow(ip, time.Now()) {
+	if !feedbackLimiter.allow(clientIP(r), time.Now()) {
 		http.Error(w, "too many messages", http.StatusTooManyRequests)
 		return
 	}
