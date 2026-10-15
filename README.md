@@ -215,6 +215,43 @@ non effectué**, et non « résultat nul ». Les clients doivent traiter ces deu
 cas différemment. Cette convention est respectée de bout en bout par le
 tableau de bord web.
 
+### Noms d'opérateurs normalisés
+
+Un même opérateur arrive sous plusieurs écritures : nom renvoyé par le
+téléphone, organisation de l'adresse IP pour les tests web… Sans correction,
+« ANPTIC » et « Agence Nationale de Promotion des TIC (ANPTIC) » seraient
+comptés comme deux opérateurs dans les statistiques.
+
+`toDocument()` enregistre donc directement le libellé canonique dans
+`operator` et `sim_operator`, via `NormalizeOperator()`
+(`database/mongodb/operators.go`). Une variante est reconnue dès qu'elle
+contient le motif, sans tenir compte de la casse :
+
+| Motif | Libellé canonique |
+|---|---|
+| `onatel`, `office national des telecommunications`, `telmob` | ONATEL / Telmob |
+| `orange burkina` | Orange Burkina Faso |
+| `anptic`, `agence nationale de promotion des tic` | ANPTIC |
+| `autorite de regulation des communications` | ARCEP Burkina |
+| `telecel` | Telecel Faso |
+| `moov` | Moov Africa |
+
+Ces règles sont les mêmes que `OPERATOR_ALIASES` du service IA
+(`AI_yele/model.py`) : toute modification doit être reportée des deux côtés,
+ainsi que dans le script de migration ci-dessous.
+
+**Mesures enregistrées avant cette normalisation.** Le script
+`outils/normaliser_operateurs.py` met à jour une fois pour toutes les
+documents existants de `speedtest_results`. Il simule par défaut et n'écrit
+qu'avec `--appliquer` ; il peut être relancé sans risque.
+
+```bash
+pip install pymongo
+export SPEEDTEST_DATABASE_CONNECTION_STRING="mongodb+srv://..."
+python outils/normaliser_operateurs.py              # affiche les changements prévus
+python outils/normaliser_operateurs.py --appliquer  # écrit en base
+```
+
 ---
 
 ## Structure du code
@@ -248,8 +285,9 @@ go vet ./...
 ```
 
 Les tests couvrent le masquage des IP (`results/telemetry_test.go`), le
-contrôle des mesures reçues (`results/validate_test.go`) et la lecture des
-champs mobiles (`database/mongodb/mongodb_test.go`). Ils tournent sur GitHub
+contrôle des mesures reçues (`results/validate_test.go`), la lecture des
+champs mobiles (`database/mongodb/mongodb_test.go`) et la normalisation des
+noms d'opérateurs (`database/mongodb/operators_test.go`). Ils tournent sur GitHub
 Actions à chaque push (`.github/workflows/go-test.yml`).
 
 ## Déploiement

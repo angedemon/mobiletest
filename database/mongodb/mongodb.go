@@ -842,6 +842,12 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 		}
 	}
 
+	// Un même opérateur arrive sous plusieurs écritures (app, organisation IP) :
+	// on stocke directement le libellé canonique pour que les agrégations
+	// par opérateur ne le comptent qu'une fois.
+	doc.Operator = NormalizeOperator(doc.Operator)
+	doc.SimOperator = NormalizeOperator(doc.SimOperator)
+
 	return doc
 }
 
