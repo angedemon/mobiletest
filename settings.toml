@@ -36,6 +36,10 @@ database_name="yele_speedtest"
 # Vide = désactivé. À définir via SPEEDTEST_AI_SERVICE_URL sur Render.
 # Exemple local : ai_service_url="http://localhost:8000"
 ai_service_url=""
+# Connexion avec Google : identifiant client OAuth de type « Application Web »
+# (xxx.apps.googleusercontent.com). Se passe par SPEEDTEST_GOOGLE_CLIENT_ID.
+# Vide = bouton « Continuer avec Google » refusé par le serveur.
+google_client_id=""
 
 # Legacy SQL settings (unused when database_type="mongodb")
 database_hostname=""

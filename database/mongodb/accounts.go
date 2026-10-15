@@ -41,6 +41,8 @@ type User struct {
 	Email        string             `bson:"email"         json:"email"`
 	Name         string             `bson:"name"          json:"name"`
 	PasswordHash string             `bson:"password_hash" json:"-"`
+	// Identifiant Google (« sub ») du compte, s'il s'est connecté avec Google.
+	GoogleSub string `bson:"google_sub,omitempty" json:"-"`
 	Salt         string             `bson:"salt"          json:"-"`
 	CreatedAt    time.Time          `bson:"created_at"    json:"createdAt"`
 }
@@ -60,8 +62,10 @@ func (m *MongoDB) sessions() *mongo.Collection { return m.collection.Database().
 func (m *MongoDB) EnsureAccountIndexes() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	if _, err := m.users().Indexes().CreateOne(ctx, mongo.IndexModel{
-		Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true),
+	if _, err := m.users().Indexes().CreateMany(ctx, []mongo.IndexModel{
+		{Keys: bson.D{{Key: "email", Value: 1}}, Options: options.Index().SetUnique(true)},
+		{Keys: bson.D{{Key: "google_sub", Value: 1}},
+			Options: options.Index().SetUnique(true).SetSparse(true)},
 	}); err != nil {
 		return err
 	}
@@ -125,6 +129,39 @@ func (m *MongoDB) CreateUser(email, password, name string) (*User, string, error
 	return u, token, err
 }
 
+// GoogleUser retrouve (ou crée) le compte d'une identité Google vérifiée et
+// ouvre une session. Ordre de recherche : identifiant Google, puis e-mail —
+// un compte créé avec e-mail et mot de passe est alors relié à Google, ce
+// qui est sûr puisque Google a vérifié la propriété de l'adresse.
+func (m *MongoDB) GoogleUser(sub, email, name string) (*User, string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	var u User
+	err := m.users().FindOne(ctx, bson.M{"google_sub": sub}).Decode(&u)
+	if err == mongo.ErrNoDocuments {
+		err = m.users().FindOne(ctx, bson.M{"email": NormalizeEmail(email)}).Decode(&u)
+		if err == nil {
+			_, err = m.users().UpdateByID(ctx, u.ID, bson.M{"$set": bson.M{"google_sub": sub}})
+		} else if err == mongo.ErrNoDocuments {
+			u = User{
+				Email: NormalizeEmail(email), Name: strings.TrimSpace(name),
+				GoogleSub: sub, CreatedAt: time.Now(),
+			}
+			var res *mongo.InsertOneResult
+			res, err = m.users().InsertOne(ctx, &u)
+			if err == nil {
+				u.ID = res.InsertedID.(primitive.ObjectID)
+			}
+		}
+	}
+	if err != nil {
+		return nil, "", err
+	}
+	token, err := m.openSession(ctx, u.ID)
+	return &u, token, err
+}
+
 // Login vérifie le mot de passe et ouvre une session.
 func (m *MongoDB) Login(email, password string) (*User, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -140,6 +177,9 @@ func (m *MongoDB) Login(email, password string) (*User, string, error) {
 	}
 	if err != nil {
 		return nil, "", err
+	}
+	if u.PasswordHash == "" { // compte créé avec Google, sans mot de passe
+		return nil, "", ErrBadLogin
 	}
 	salt, _ := hex.DecodeString(u.Salt)
 	hash, err := hashPassword(password, salt)
