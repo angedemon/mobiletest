@@ -174,6 +174,11 @@ func Record(w http.ResponseWriter, r *http.Request) {
 		}
 		ipAddr = strings.TrimSpace(ipAddr)
 	}
+	if !telemetryLimiter.allow(ipAddr, time.Now()) {
+		http.Error(w, "too many results", http.StatusTooManyRequests)
+		return
+	}
+
 	userAgent := r.UserAgent()
 	language := r.Header.Get("Accept-Language")
 
@@ -184,6 +189,12 @@ func Record(w http.ResponseWriter, r *http.Request) {
 	jitter := r.FormValue("jitter")
 	logs := r.FormValue("log")
 	extra := r.FormValue("extra")
+
+	if err := validateTelemetry(download, upload, ping, jitter, extra); err != nil {
+		log.Warnf("Telemetry rejected from %s: %s", ipAddr, err)
+		http.Error(w, "invalid result: "+err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	if config.LoadedConfig().RedactIP {
 		ipAddr  = "0.0.0.0"
@@ -215,6 +226,15 @@ func Record(w http.ResponseWriter, r *http.Request) {
 	entropy := ulid.Monotonic(rand.New(rand.NewSource(t.UnixNano())), 0)
 	uuid := ulid.MustNew(ulid.Timestamp(t), entropy)
 	record.UUID = uuid.String()
+
+	// IMP-03 : test fait par un utilisateur connecté → rattaché à son compte.
+	if database.MongoDB != nil {
+		if token := bearerToken(r); token != "" {
+			if u, err := database.MongoDB.UserForToken(token); err == nil {
+				record.UserID = u.ID.Hex()
+			}
+		}
+	}
 
 	err := database.DB.Insert(&record)
 	if err != nil {

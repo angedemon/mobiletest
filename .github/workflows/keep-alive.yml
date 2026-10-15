@@ -1,0 +1,25 @@
+# Garde le serveur de mesure éveillé.
+#
+# L'offre gratuite de Render endort le service après 15 minutes sans requête ;
+# il met ensuite 60 à 90 secondes à répondre. Le premier test de la journée
+# commençait donc par une longue attente. Un appel toutes les 10 minutes le
+# maintient éveillé (750 h gratuites par mois : assez pour un service 24 h/24).
+#
+# GitHub peut retarder les tâches planifiées de quelques minutes, et les
+# désactive dans un dépôt sans activité depuis 60 jours.
+name: Keep alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Réveiller le serveur
+        run: |
+          curl --fail --silent --show-error --retry 6 --retry-delay 15 \
+            --retry-all-errors --max-time 30 \
+            -o /dev/null https://mobiletest-j0c6.onrender.com/empty

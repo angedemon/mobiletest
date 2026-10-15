@@ -70,6 +70,43 @@ type Document struct {
 	MeasurementType string `bson:"measurement_type" json:"measurementType"`
 	SignalDbm       int    `bson:"signal_dbm"       json:"signalDbm"`
 	SignalLevel     int    `bson:"signal_level"     json:"signalLevel"`
+	// Qualité radio de la cellule de service (4G/5G) et emplacement de la
+	// SIM qui porte les données. 0 = non mesuré (test Wi-Fi, 2G/3G, ancienne
+	// version de l'app).
+	RSRP    int `bson:"rsrp"     json:"rsrp"`
+	RSRQ    int `bson:"rsrq"     json:"rsrq"`
+	SINR    int `bson:"sinr"     json:"sinr"`
+	SimSlot int `bson:"sim_slot" json:"simSlot"`
+	// Débits (Mb/s) et latence (ms) minimum et maximum relevés pendant le
+	// test ; la valeur moyenne reste dans dl/ul/ping. 0 = non mesuré.
+	DownloadMin float64 `bson:"dl_min"   json:"downloadMin"`
+	DownloadMax float64 `bson:"dl_max"   json:"downloadMax"`
+	UploadMin   float64 `bson:"ul_min"   json:"uploadMin"`
+	UploadMax   float64 `bson:"ul_max"   json:"uploadMax"`
+	PingMin     float64 `bson:"ping_min" json:"pingMin"`
+	PingMax     float64 `bson:"ping_max" json:"pingMax"`
+	// Perte de paquets en %, -1 = non mesurée (0 est une valeur légitime).
+	PacketLoss float64 `bson:"packet_loss" json:"packetLoss"`
+	// Score global 0-100 calculé par l'app (formule : docs/SCORE.md de
+	// mobilefront). 0 = non calculé (anciennes versions de l'app).
+	GlobalScore float64 `bson:"global_score" json:"globalScore"`
+	// Identifiant du test côté app : un renvoi du même test (après l'avis
+	// QoE, ou une nouvelle tentative hors ligne) met à jour le document au
+	// lieu d'en créer un second.
+	TestID string `bson:"test_id,omitempty" json:"testId,omitempty"`
+	// Identifiant d'appareil anonyme (empreinte, ne révèle rien de
+	// personnel) et données consommées par le test en Kio (-1 = non mesuré).
+	DeviceID    string `bson:"device_id"     json:"-"`
+	DataUsedKiB int    `bson:"data_used_kib" json:"dataUsedKiB"`
+	// Compte (IMP-03) : identifiant du compte connecté, vide si anonyme.
+	UserID string `bson:"user_id,omitempty" json:"-"`
+	// Origine de la position : "gps", "gps_mocked" (position simulée par une
+	// app de faux GPS), "ip" (géolocalisation approximative de l'adresse IP)
+	// ou vide pour les mesures antérieures au champ.
+	LocationSource string `bson:"location_source" json:"locationSource"`
+	// Suspect écarte la mesure de toutes les statistiques et de la carte,
+	// sans la supprimer : elle reste en base pour analyse.
+	Suspect bool `bson:"suspect" json:"-"`
 	// From ISPInfo
 	City    string `bson:"city"    json:"city"`
 	Country string `bson:"country" json:"country"`
@@ -103,6 +140,23 @@ type mobileExtra struct {
 	Type        string `json:"type"`
 	SignalDbm   int    `json:"signalDbm"`
 	SignalLevel int    `json:"signalLevel"`
+	// "gps", "gps_mocked" ou "ip" (voir Document.LocationSource).
+	LocationSource string `json:"locationSource"`
+	RSRP           int    `json:"rsrp"`
+	RSRQ           int    `json:"rsrq"`
+	SINR           int    `json:"sinr"`
+	SimSlot        int    `json:"simSlot"`
+	DownloadMin    float64 `json:"downloadMin"`
+	DownloadMax    float64 `json:"downloadMax"`
+	UploadMin      float64 `json:"uploadMin"`
+	UploadMax      float64 `json:"uploadMax"`
+	PingMin        float64 `json:"pingMin"`
+	PingMax        float64 `json:"pingMax"`
+	PacketLoss     *float64 `json:"packetLoss"`
+	GlobalScore    float64  `json:"globalScore"`
+	TestID         string   `json:"testId"`
+	DeviceID       string   `json:"deviceId"`
+	DataUsedKiB    *int     `json:"dataUsedKiB"`
 }
 
 // ispInfo matches the real shape stored in the isp_info field:
@@ -152,6 +206,11 @@ type MapPoint struct {
 	Ping        float64 `json:"ping"`
 	Location    string  `json:"location"`
 	Timestamp   string  `json:"timestamp"`
+	// Score global 0-100, RSRP et perte de paquets : couches et info-bulles
+	// de la carte (IMP-10, IMP-12).
+	GlobalScore float64 `json:"globalScore"`
+	RSRP        int     `json:"rsrp"`
+	PacketLoss  float64 `json:"packetLoss"`
 	// Streaming & browsing metrics (zero = test not performed)
 	StreamingScore         float64 `json:"streamingScore"`
 	StreamingMaxResolution string  `json:"streamingMaxResolution"`
@@ -216,13 +275,18 @@ func Open(uri, dbName string) *MongoDB {
 		{Keys: bson.D{{Key: "operator", Value: 1}}},
 		{Keys: bson.D{{Key: "ip_address", Value: 1}}},
 		{Keys: bson.D{{Key: "network_type", Value: 1}}},
+		{Keys: bson.D{{Key: "test_id", Value: 1}}},
 	}
 	if _, err := coll.Indexes().CreateMany(ctx, indexes); err != nil {
 		log.Warnf("MongoDB index creation warning: %s", err)
 	}
 
 	log.Infof("Connected to MongoDB Atlas, database: %s", dbName)
-	return &MongoDB{client: client, collection: coll}
+	m := &MongoDB{client: client, collection: coll}
+	if err := m.EnsureAccountIndexes(); err != nil {
+		log.Warnf("MongoDB account index warning: %s", err)
+	}
+	return m
 }
 
 // ── DataAccess interface ──────────────────────────────────────────────────────
@@ -231,6 +295,13 @@ func (m *MongoDB) Insert(data *schema.TelemetryData) error {
 	doc := m.toDocument(data)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	if doc.TestID != "" {
+		// Même test renvoyé (avis QoE ajouté, nouvelle tentative après un
+		// échec réseau) : mise à jour du document existant.
+		_, err := m.collection.ReplaceOne(ctx, bson.M{"test_id": doc.TestID}, doc,
+			options.Replace().SetUpsert(true))
+		return err
+	}
 	_, err := m.collection.InsertOne(ctx, doc)
 	return err
 }
@@ -281,12 +352,15 @@ func (m *MongoDB) FetchLast100() ([]schema.TelemetryData, error) {
 // correct puisqu'ils proviennent tous de tests actifs.
 var excludePassive = bson.M{"$ne": "passive"}
 
-// withoutPassive ajoute le filtre ci-dessus à un filtre existant.
+// withoutPassive ajoute le filtre ci-dessus à un filtre existant, et écarte
+// aussi les mesures marquées suspectes (position GPS simulée). `$ne: true`
+// retient les documents antérieurs, dépourvus du champ.
 func withoutPassive(filter bson.M) bson.M {
 	if filter == nil {
 		filter = bson.M{}
 	}
 	filter["measurement_type"] = excludePassive
+	filter["suspect"] = bson.M{"$ne": true}
 	return filter
 }
 
@@ -356,27 +430,7 @@ func (m *MongoDB) FetchResults(page, limit int, operator, networkType, from, to 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	filter := withoutPassive(bson.M{})
-	if operator != "" {
-		filter["operator"] = bson.M{"$regex": operator, "$options": "i"}
-	}
-	if networkType != "" {
-		filter["network_type"] = networkType
-	}
-	timeFilter := bson.M{}
-	if from != "" {
-		if t, err := time.Parse("2006-01-02", from); err == nil {
-			timeFilter["$gte"] = t
-		}
-	}
-	if to != "" {
-		if t, err := time.Parse("2006-01-02", to); err == nil {
-			timeFilter["$lte"] = t.Add(24 * time.Hour)
-		}
-	}
-	if len(timeFilter) > 0 {
-		filter["timestamp"] = timeFilter
-	}
+	filter := resultsFilter(operator, networkType, from, to)
 
 	total, _ := m.collection.CountDocuments(ctx, filter)
 	skip := int64((page - 1) * limit)
@@ -506,6 +560,9 @@ func (m *MongoDB) FetchMapPoints() ([]MapPoint, error) {
 			Ping:        round2(ping),
 			Location:    doc.Location,
 			Timestamp:   doc.Timestamp.Format("02/01/2006 15:04"),
+			GlobalScore: doc.GlobalScore,
+			RSRP:        doc.RSRP,
+			PacketLoss:  doc.PacketLoss,
 			StreamingScore:         round2(doc.StreamingScore),
 			StreamingMaxResolution: doc.StreamingMaxResolution,
 			StreamingRebufferRatio: round2(doc.StreamingRebufferRatio),
@@ -683,6 +740,7 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 		UserAgent: data.UserAgent,
 		Language:  data.Language,
 		Log:       data.Log,
+		UserID:    data.UserID,
 	}
 
 	// Parse mobile extra JSON
@@ -710,6 +768,32 @@ func (m *MongoDB) toDocument(data *schema.TelemetryData) *Document {
 			doc.BrowsingScore = extra.BrowsingScore
 			doc.SignalDbm = extra.SignalDbm
 			doc.SignalLevel = extra.SignalLevel
+			doc.LocationSource = extra.LocationSource
+			doc.RSRP = extra.RSRP
+			doc.RSRQ = extra.RSRQ
+			doc.SINR = extra.SINR
+			doc.SimSlot = extra.SimSlot
+			doc.DownloadMin = extra.DownloadMin
+			doc.DownloadMax = extra.DownloadMax
+			doc.UploadMin = extra.UploadMin
+			doc.UploadMax = extra.UploadMax
+			doc.PingMin = extra.PingMin
+			doc.PingMax = extra.PingMax
+			doc.GlobalScore = extra.GlobalScore
+			doc.TestID = extra.TestID
+			doc.DeviceID = extra.DeviceID
+			doc.DataUsedKiB = -1
+			if extra.DataUsedKiB != nil {
+				doc.DataUsedKiB = *extra.DataUsedKiB
+			}
+			// Champ absent (anciennes versions de l'app) : non mesuré.
+			doc.PacketLoss = -1
+			if extra.PacketLoss != nil {
+				doc.PacketLoss = *extra.PacketLoss
+			}
+			// Une position simulée rend la mesure inexploitable pour la
+			// carte : rien ne garantit qu'elle a été faite à cet endroit.
+			doc.Suspect = extra.LocationSource == "gps_mocked"
 			// Un `extra` sans type explicite provient d'une version antérieure
 			// de l'application mobile : c'était nécessairement un test actif.
 			doc.MeasurementType = extra.Type
