@@ -15,6 +15,10 @@ COPY --from=build_base /build/speedtest ./
 COPY settings.toml ./
 COPY web/ ./web/
 
+# Le programme n'accepte que l'option -c (fichier de configuration) : le
+# dossier des pages web se règle par variable d'environnement (assets_path).
+ENV SPEEDTEST_ASSETS_PATH=/app/web/assets
+
 EXPOSE 8989
 
-CMD ["./speedtest", "--asset-path", "/app/web/assets"]
+CMD ["./speedtest", "-c", "/app/settings.toml"]
