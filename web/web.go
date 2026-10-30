@@ -104,6 +104,12 @@ func ListenAndServe(conf *config.Config) error {
 	r.HandleFunc(conf.BaseURL+"/api/me", results.Me)
 	r.Get(conf.BaseURL+"/api/me/results", results.MyResults)
 
+	// Mode Contrôle : mesures de l'autorité, collection séparée, agents
+	// habilités seulement (control_agents).
+	r.Get(conf.BaseURL+"/api/control/me", results.ControlMe)
+	r.Post(conf.BaseURL+"/api/control/measurements", results.ControlRecord)
+	r.Get(conf.BaseURL+"/api/control/campaign", results.ControlCampaign)
+
 	// Proxy vers le micro-service IA (prédiction + détection d'anomalies).
 	// /api/ai/anomalies -> <ai_service_url>/ai/anomalies
 	// Désactivé si ai_service_url est vide (SPEEDTEST_AI_SERVICE_URL).

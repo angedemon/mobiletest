@@ -38,6 +38,10 @@ type Config struct {
 	// Identifiant(s) client OAuth Google acceptés pour la connexion Google
 	// (séparés par des virgules). Vide = connexion Google désactivée.
 	GoogleClientID string `mapstructure:"google_client_id"`
+	// Mode Contrôle : e-mails des comptes d'agents habilités à envoyer et
+	// lire des mesures de contrôle (séparés par des virgules). Vide = mode
+	// Contrôle fermé à tous.
+	ControlAgents string `mapstructure:"control_agents"`
 
 	EnableHTTP2 bool   `mapstructure:"enable_http2"`
 	EnableTLS   bool   `mapstructure:"enable_tls"`
@@ -77,6 +81,7 @@ func init() {
 	_ = viper.BindEnv("database_connection_string")
 	_ = viper.BindEnv("ai_service_url")
 	_ = viper.BindEnv("google_client_id")
+	_ = viper.BindEnv("control_agents")
 }
 
 func Load(configPath string) Config {
