@@ -139,3 +139,43 @@ func VerifyControlChain(list []ControlMeasurement) []ControlMeasurement {
 	}
 	return broken
 }
+
+// ControlCampaignSummary résume une campagne pour la liste du tableau de bord.
+type ControlCampaignSummary struct {
+	Campaign     string    `bson:"_id"           json:"campaign"`
+	Count        int64     `bson:"count"         json:"count"`
+	Devices      []string  `bson:"devices"       json:"devices"`
+	Operators    []string  `bson:"operators"     json:"operators"`
+	Agents       []string  `bson:"agents"        json:"agents"`
+	FirstAt      time.Time `bson:"first_at"      json:"firstAt"`
+	LastAt       time.Time `bson:"last_at"       json:"lastAt"`
+	LastReceived time.Time `bson:"last_received" json:"lastReceived"`
+}
+
+// FetchControlCampaigns liste les campagnes, la plus récente en premier.
+func (m *MongoDB) FetchControlCampaigns() ([]ControlCampaignSummary, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	pipeline := mongo.Pipeline{
+		{{Key: "$group", Value: bson.M{
+			"_id":           "$campaign",
+			"count":         bson.M{"$sum": 1},
+			"devices":       bson.M{"$addToSet": "$device_id"},
+			"operators":     bson.M{"$addToSet": "$operator"},
+			"agents":        bson.M{"$addToSet": "$agent_email"},
+			"first_at":      bson.M{"$min": "$measured_at"},
+			"last_at":       bson.M{"$max": "$measured_at"},
+			"last_received": bson.M{"$max": "$received_at"},
+		}}},
+		{{Key: "$sort", Value: bson.M{"last_at": -1}}},
+		{{Key: "$limit", Value: 200}},
+	}
+	cursor, err := m.controls().Aggregate(ctx, pipeline)
+	if err != nil {
+		return nil, err
+	}
+	defer cursor.Close(ctx)
+	out := []ControlCampaignSummary{}
+	err = cursor.All(ctx, &out)
+	return out, err
+}

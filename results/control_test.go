@@ -1,6 +1,10 @@
 package results
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/librespeed/speedtest-go/config"
+)
 
 func TestIsControlAgent(t *testing.T) {
 	agents := " Chef@ARCEP.bf, agent1@arcep.bf ,"
@@ -42,5 +46,22 @@ func TestParseControlPayload(t *testing.T) {
 		if p, _ := parseControlPayload([]byte(raw)); p != nil {
 			t.Errorf("%s : mesure invalide acceptée", name)
 		}
+	}
+}
+
+// La direction (lecteur) consulte sans être agent ; un citoyen ne voit rien.
+func TestCanReadControl(t *testing.T) {
+	conf := &config.Config{ControlAgents: "agent1@arcep.bf", ControlReaders: "dg@arcep.bf"}
+	for email, want := range map[string]bool{
+		"agent1@arcep.bf":   true,
+		"DG@arcep.bf":       true,
+		"citoyen@exemple.bf": false,
+	} {
+		if got := canReadControl(email, conf); got != want {
+			t.Errorf("canReadControl(%q) = %v, attendu %v", email, got, want)
+		}
+	}
+	if isControlAgent("dg@arcep.bf", conf.ControlAgents) {
+		t.Error("un lecteur ne doit pas pouvoir envoyer de mesure")
 	}
 }

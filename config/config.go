@@ -42,6 +42,9 @@ type Config struct {
 	// lire des mesures de contrôle (séparés par des virgules). Vide = mode
 	// Contrôle fermé à tous.
 	ControlAgents string `mapstructure:"control_agents"`
+	// Mode Contrôle : e-mails des comptes de la direction, qui consultent
+	// les campagnes sans pouvoir envoyer de mesure.
+	ControlReaders string `mapstructure:"control_readers"`
 
 	EnableHTTP2 bool   `mapstructure:"enable_http2"`
 	EnableTLS   bool   `mapstructure:"enable_tls"`
@@ -82,6 +85,7 @@ func init() {
 	_ = viper.BindEnv("ai_service_url")
 	_ = viper.BindEnv("google_client_id")
 	_ = viper.BindEnv("control_agents")
+	_ = viper.BindEnv("control_readers")
 }
 
 func Load(configPath string) Config {

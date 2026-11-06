@@ -44,6 +44,9 @@ google_client_id=""
 # agents, séparés par des virgules. Se passe par SPEEDTEST_CONTROL_AGENTS.
 # Vide = personne ne peut envoyer de mesure de contrôle.
 control_agents=""
+# Comptes de la direction : consultation des campagnes seulement.
+# Se passe par SPEEDTEST_CONTROL_READERS.
+control_readers=""
 
 # Legacy SQL settings (unused when database_type="mongodb")
 database_hostname=""

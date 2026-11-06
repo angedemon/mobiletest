@@ -109,6 +109,7 @@ func ListenAndServe(conf *config.Config) error {
 	r.Get(conf.BaseURL+"/api/control/me", results.ControlMe)
 	r.Post(conf.BaseURL+"/api/control/measurements", results.ControlRecord)
 	r.Get(conf.BaseURL+"/api/control/campaign", results.ControlCampaign)
+	r.Get(conf.BaseURL+"/api/control/campaigns", results.ControlCampaigns)
 
 	// Proxy vers le micro-service IA (prédiction + détection d'anomalies).
 	// /api/ai/anomalies -> <ai_service_url>/ai/anomalies

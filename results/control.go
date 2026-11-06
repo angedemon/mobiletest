@@ -43,6 +43,26 @@ func isControlAgent(email, agents string) bool {
 	return false
 }
 
+// canReadControl : agents et lecteurs de la direction consultent les
+// campagnes ; seuls les agents envoient des mesures.
+func canReadControl(email string, conf *config.Config) bool {
+	return isControlAgent(email, conf.ControlAgents) || isControlAgent(email, conf.ControlReaders)
+}
+
+// controlReader renvoie le compte connecté s'il peut consulter les
+// campagnes, ou écrit 401 / 403.
+func controlReader(w http.ResponseWriter, r *http.Request) *mongodb.User {
+	u := currentUser(w, r)
+	if u == nil {
+		return nil
+	}
+	if !canReadControl(u.Email, config.LoadedConfig()) {
+		http.Error(w, "not allowed", http.StatusForbidden)
+		return nil
+	}
+	return u
+}
+
 // controlAgent renvoie le compte de l'agent connecté, ou écrit 401 / 403.
 func controlAgent(w http.ResponseWriter, r *http.Request) *mongodb.User {
 	u := currentUser(w, r)
@@ -62,9 +82,11 @@ func ControlMe(w http.ResponseWriter, r *http.Request) {
 	if u == nil {
 		return
 	}
+	conf := config.LoadedConfig()
 	jsonResponse(w, map[string]any{
-		"agent": isControlAgent(u.Email, config.LoadedConfig().ControlAgents),
-		"email": u.Email,
+		"agent":  isControlAgent(u.Email, conf.ControlAgents),
+		"reader": canReadControl(u.Email, conf),
+		"email":  u.Email,
 	})
 }
 
@@ -162,7 +184,7 @@ func ControlCampaign(w http.ResponseWriter, r *http.Request) {
 	if !mongoRequired(w) {
 		return
 	}
-	if controlAgent(w, r) == nil {
+	if controlReader(w, r) == nil {
 		return
 	}
 	id := r.URL.Query().Get("id")
@@ -188,4 +210,22 @@ func ControlCampaign(w http.ResponseWriter, r *http.Request) {
 		"brokenCount":  len(broken),
 		"measurements": list,
 	})
+}
+
+// ControlCampaigns — GET /api/control/campaigns : liste des campagnes, de la
+// plus récente à la plus ancienne (agents et lecteurs).
+func ControlCampaigns(w http.ResponseWriter, r *http.Request) {
+	if !mongoRequired(w) {
+		return
+	}
+	if controlReader(w, r) == nil {
+		return
+	}
+	list, err := database.MongoDB.FetchControlCampaigns()
+	if err != nil {
+		log.Errorf("ControlCampaigns error: %s", err)
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+	jsonResponse(w, list)
 }
