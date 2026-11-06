@@ -222,6 +222,10 @@ const barometerWindow = 90 * 24 * time.Hour
 // en ms) parmi les tests actifs aboutis des 90 derniers jours, au niveau
 // national et pour son opérateur.
 func (m *MongoDB) FetchBarometer(download, upload, ping float64, operator string) (*Barometer, error) {
+	// Le client peut transmettre une variante (« Telmob ») : on la compare
+	// au libellé canonique stocké en base.
+	operator = NormalizeOperator(operator)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
