@@ -286,6 +286,9 @@ func Open(uri, dbName string) *MongoDB {
 	if err := m.EnsureAccountIndexes(); err != nil {
 		log.Warnf("MongoDB account index warning: %s", err)
 	}
+	if err := m.EnsureControlIndexes(); err != nil {
+		log.Warnf("MongoDB control index warning: %s", err)
+	}
 	return m
 }
 

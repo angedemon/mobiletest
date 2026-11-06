@@ -40,6 +40,13 @@ ai_service_url=""
 # (xxx.apps.googleusercontent.com). Se passe par SPEEDTEST_GOOGLE_CLIENT_ID.
 # Vide = bouton « Continuer avec Google » refusé par le serveur.
 google_client_id=""
+# Mode Contrôle (drive test / walk test de l'autorité) : e-mails des comptes
+# agents, séparés par des virgules. Se passe par SPEEDTEST_CONTROL_AGENTS.
+# Vide = personne ne peut envoyer de mesure de contrôle.
+control_agents=""
+# Comptes de la direction : consultation des campagnes seulement.
+# Se passe par SPEEDTEST_CONTROL_READERS.
+control_readers=""
 
 # Legacy SQL settings (unused when database_type="mongodb")
 database_hostname=""
